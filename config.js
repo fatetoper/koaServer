@@ -1,7 +1,18 @@
+/*
+ * @Author: fatetoper
+ * @Date: 2019-07-19 08:59:46
+ * @LastEditors: fatetoper
+ * @LastEditTime: 2020-09-14 20:37:35
+ * @Modultype: Component
+ * @Usage: import/global/prototype
+ * @Description: Do not edit
+ * @FilePath: \node\config.js
+ */
 const path=require('path');
 
 module.exports={
   //服务器
+  host: 'localhost',
   port: 8081,
   md5_key: 'SDfdfg5aO*&$O%ohlkuIYIUOR$LUI$HR(&*FHULI$HRGSDLKJFHSDILUY$*OOY$IUHILUFH*O$&TIGRgrdrgd大概多少风格士大夫敢死队风格让他如果士大夫敢死队发)',
 
@@ -19,6 +30,7 @@ module.exports={
 
   //upload
   upload_dir: path.resolve(__dirname, 'upload'),
+  upload_tmp: path.resolve(__dirname, 'upload\\tmp'),
 
   //session
   maxAge: 86400*1000,

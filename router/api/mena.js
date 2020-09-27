@@ -1,12 +1,14 @@
 const Router=require('koa-router')
 const static=require('../../libs/contentStatic')
-const {upload,body}=require('../../libs/body')
+const { upload, body }=require('../../libs/body')
 const CaptchaSDK = require('dx-captcha-sdk')
 const Qs = require('qs')
+const fs = require('fs')
 const sendCheck=require('../../libs/sendCheck')
 const makeToken=require('../../libs/maketoken')
 const makeRandom=require('../../libs/makerandom')
-
+const { getStat, doUnlink, doMkdir }=require('../../libs/fs')
+const config=require('../../config')
 
 let router=new Router()
 
@@ -50,7 +52,7 @@ router.get('/artpro', async ctx=>{
   const pageNo = ctx.query.pageNo, pageSize = ctx.query.pageSize
   const sql = "SELECT ??,??,?? as 'key',??,??,?? as 'tit',??,??,??,??,??,??,??,?? as 'oprater' FROM rc_archives LIMIT ?,?;"
   ctx.body = await ctx.db.query(sql, [...col, (pageNo-1)*pageSize, pageSize*1])
-});
+})
 
 // 获取writer	GET	/api/mena/writer
 router.get('/writer', async ctx=>{
@@ -62,9 +64,9 @@ router.get('/writer', async ctx=>{
   ctx.body= {
     writer
   }
-});
+})
 
-// 获取writer	GET	/api/mena/writer
+// 获取writer	GET	/api/mena/source
 router.get('/source', async ctx=>{
   
   const sql = "SELECT id as 'key',id as 'value',typename as 'title' FROM rc_channeltype"
@@ -74,7 +76,7 @@ router.get('/source', async ctx=>{
   ctx.body= {
     source
   }
-});
+})
 
 // 获取editorinfo	GET	/api/mena/editorinfo
 router.get('/editorinfo', async ctx=>{
@@ -153,7 +155,7 @@ router.get('/editorinfo', async ctx=>{
   ctx.body= {
     tree
   }
-});
+})
 
 // 获取artclo信息	GET	/api/mena/artclo
 router.get('/artclo', async ctx=>{
@@ -209,7 +211,7 @@ router.get('/artclo', async ctx=>{
     totle:totle[0]['COUNT(*)'],
     category
   }
-});
+})
 
 // 获取nav	GET	/api/you/nav
 router.get('/nav/', async ctx=>{
@@ -222,7 +224,7 @@ router.get('/nav/', async ctx=>{
   // console.log(result)
 
   ctx.body=result
-});
+})
 
 // 获取相关搜索	GET	/api/you/searchautocomplete
 router.get('/searchautocomplete/', async ctx=>{
@@ -235,7 +237,8 @@ router.get('/searchautocomplete/', async ctx=>{
   let result =await ctx.db.query(sql)
   // console.log(result)
   ctx.body=result
-});
+})
+
 
 router.post('/checkNum/', async ctx=>{
   let aw = Qs.parse(ctx.request.fields.data).data
@@ -297,7 +300,133 @@ router.post('/checkNum/', async ctx=>{
       makeAndSend(kw.tel)
     }
     
-});
+})
+
+// 获取一个新的filename	GET	/api/mena/newfilename
+router.get('/dirname', async ctx=>{
+  let dirname = 'm25p3'
+  const baseurl = config.upload_tmp.split('\\')[1]
+  const host = config.host + ':' + config.port
+  console.log('@baseurl=>', baseurl)
+  ctx.body= {
+    dirname,
+    baseurl,
+    host
+  }
+})
+
+// 获取一个文件夹内的图片数据	GET	/api/mena/images
+// {
+//   uid: '-1',
+//   name: 'image.png',
+//   status: 'done',
+//   url: 'http://localhost:8081/upload/def/jkjgkEfvpUPVyRjUImniVslZfWPnJuuZ.png'
+// }
+router.get('/images/:dirname', async ctx=>{
+  const dirname = ctx.params.dirname
+  const baseUrl = 'http://' + config.host + ':' + config.port
+  const sql = `SELECT aid AS uid,title AS name,CONCAT('${baseUrl}',url)AS url,uptime,'done' AS status  FROM rc_uploads WHERE arcpath = '${dirname}'`
+  try {
+    const res = await ctx.db.query(sql)
+    // console.log(res)
+    if (res) {
+      ctx.body = res
+    }
+  } catch (e) {
+    console.log(e)
+    ctx.body = {
+      error: "文件路径错误"
+    }
+  }
+})
+
+// 上传img获取URL	POST	/api/mena/img
+let pathUpload
+router.post('/imgupload',
+...upload({
+  uploadDir: pathUpload,
+  maxFileSize: 5*1024*1024
+}), 
+async (ctx, next) => {
+  /*
+  * 读取路径信息 + 按路径移到图片文件 + 生产新相对路径ctx.imgPath + 标志操作状态ctx.renameStatus
+  * @param {string} filepath 路径
+  */
+  try {
+    const file = ctx.request.fields.file[0]
+    const tmpDir = 'tmp'
+    pathUpload = ctx.request.fields.dirname
+
+    const renamePath = config.upload_tmp.replace(tmpDir, pathUpload)
+    ctx.renamePath = renamePath
+    ctx.renameDir = renamePath + '\\' + file.name
+    console.log('@3=================@renameDir=>', ctx.renameDir)
+    ctx.imgPath = pathUpload + '/' + file.name
+    console.log('@4=================@renameDir=>', ctx.imgPath)
+   
+    let isExists = await getStat(renamePath)
+    if (!isExists) {
+      ctx.renamePathStatus = await doMkdir(renamePath)
+    } else if (isExists && !isExists.isDirectory()) {
+      const deLink = await doUnlink(renamePath)
+      if (deLink) {
+        ctx.renamePathStatus = await doMkdir(renamePath)
+      } 
+      else throw `Can not build path ${renamePath}`
+    } else ctx.renamePathStatus = true
+
+    if (ctx.renamePathStatus) {
+      fs.renameSync(file.path, ctx.renameDir)
+      ctx.renameStatus = true
+    }
+    await next()
+  } catch (e) { throw e }
+}, 
+async (ctx, next) => {
+  // 存入数据库，返回url
+  const img = {}
+  console.log('@8=================@ctx.request.fields', ctx.request.fields)
+  if (ctx.renameStatus) {
+    const baseUrl = renamePath => {
+      const arr = renamePath.split('\\')
+      const length = arr.length
+      return arr[length - 2]
+    }
+    ctx.url = '/' + baseUrl(ctx.renamePath) + '/' + ctx.imgPath
+    const { file:[{ size: upSize, name:upName , type: upType }], dirname: arcPath, arcid: arcId } = ctx.request.fields
+    const time = Math.round(new Date().getTime()/1000).toString()
+    const imgInfo = {
+      arcid: arcId || 0,
+      width: 0,
+      height:0,
+      title: upName,
+      mediatype: 1,
+      uptime: time,
+      playtime: 0
+    }
+    let sql = `INSERT INTO rc_uploads(arcid,arcpath,title,url,mediatype,width,height,filesize,uptime,playtime) `
+    sql+= `VALUES(${imgInfo.arcid},"${arcPath}","${imgInfo.title}","${ctx.url}",${imgInfo.mediatype},"${imgInfo.width}","${imgInfo.height}",${upSize},${time},${imgInfo.playtime});`
+    console.log(sql)
+    try {
+      const res = await ctx.db.query(sql) 
+      // console.log(res)
+      if (res) {
+        ctx.body = {
+          url: ctx.url
+        }
+      }
+    } catch (e) {
+      console.log(e)
+      ctx.body = {
+        error: "上传失败"
+      }
+    }
+  }
+  
+  await next()
+})
+
+
 
 /* router.options('/login',async ctx=>{
   console.log("===========================options==============================")
@@ -363,6 +492,6 @@ router.post('/login/', async ctx=>{
   ctx.body={
     ...result
   };
-});
+})
 
 module.exports=router.routes()

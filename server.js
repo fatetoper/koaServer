@@ -29,17 +29,19 @@ let server=new Koa();
         return 'http://localhost:8081'; // 这样就能只允许 http://localhost:80
     },
     exposeHeaders: ['WWW-Authenticate', 'Server-Authorization'],
+    // exposeHeaders: ['*'],
     maxAge: 5,
     credentials: true,
     allowMethods: ['GET', 'POST', 'DELETE'],
     allowHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    // allowHeaders: ['*'],
   }))
   
 //   最简单的app.use(post());
 //   略微灵活点的：app.use(post(), 其他中间件);
 //   可以让post仅对部分东西其效果
   server.use(post())
-
+  
   // 全局引入 MySQL、Redis客户端
   server.context.db=await require('./libs/mysql');
   server.context.redis=require('./libs/redis');
