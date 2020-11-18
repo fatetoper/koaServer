@@ -1,10 +1,10 @@
 /*
  * @Author: fatetoper
  * @Date: 2019-07-19 08:59:46
- * @LastEditors: fatetoper
- * @LastEditTime: 2020-09-14 20:48:56
- * @Modultype: Component
- * @Usage: import/global/prototype
+ * @LastEditors: Please set LastEditors
+ * @LastEditTime: 2020-11-15 14:46:48
+ * @Modultype: Router
+ * @Usage: require
  * @Description: Do not edit
  * @FilePath: \node\router\index.js
  */
